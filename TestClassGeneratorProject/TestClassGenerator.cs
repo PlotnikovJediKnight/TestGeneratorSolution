@@ -17,6 +17,7 @@ namespace TestClassGeneratorProject
     public class TestClassGenerator
     {
         private CompilationUnitSyntax root;
+        
 
         private void SetTreeRoot(FileWithContent cSharpProgram)
         {
@@ -35,14 +36,16 @@ namespace TestClassGeneratorProject
             SetTreeRoot(cSharpProgram);
 
             ClassDeclarationSyntax[] classes = GetClassSyntaxNodes();
+            FileWithContent[] toReturn = new FileWithContent[classes.Length];
 
+            int i = 0;
             foreach (var classNode in classes)
             {
-                Console.WriteLine($"The tree is a {classNode.Kind()} node.");
-                Console.WriteLine($"The tree has {classNode.Members.Count} elements in it.");
+                toReturn[i++] = new FileWithContent("TestFilesOutput\\" + classNode.Identifier + ".cs", classNode.ToFullString());
+                Console.WriteLine(i);
             }
 
-            return new FileWithContent[1] { new FileWithContent(cSharpProgram.Path + ".processed", cSharpProgram.Content.ToUpper()) };
+            return toReturn;
         }
 
         static void Main() { }

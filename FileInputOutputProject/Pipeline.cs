@@ -63,9 +63,12 @@ namespace FileInputOutputProject
 
         private async Task WriteFile(FileWithContent[] filesWithContent)
         {
-            using (var streamWriter = new StreamWriter(filesWithContent[0].Path))
+            foreach (var file in filesWithContent)
             {
-                await streamWriter.WriteAsync(filesWithContent[0].Content);
+                using (var streamWriter = new StreamWriter(file.Path))
+                {
+                    await streamWriter.WriteAsync(file.Content);
+                }
             }
         }
     }
