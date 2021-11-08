@@ -38,54 +38,54 @@ namespace TestClassGeneratorProject
             return (NamespaceDeclarationSyntax)root.Members.ElementAt(0);
         }
 
-        private BlockSyntax GetSyntaxBlockForNonVoidMethod(ClassDeclarationSyntax classSynt, MethodDeclarationSyntax method)
+        private SemanticModel GetSemanticModelForMethod(SyntaxTree tree, MethodDeclarationSyntax method)
         {
-
-            SyntaxTree tree = CSharpSyntaxTree.ParseText(method.ToFullString());
-
-            ///////////////////////////////////////////////////////////////////////////////////////////////////////
             var assemblyPath = Path.ChangeExtension(Path.GetTempFileName(), "exe");
 
             var compilation = CSharpCompilation.Create(Path.GetFileName(assemblyPath))
                 .WithOptions(new CSharpCompilationOptions(OutputKind.ConsoleApplication))
                 .AddReferences(MetadataReference.CreateFromFile(typeof(object).Assembly.Location))
                 .AddSyntaxTrees(tree);
+            return compilation.GetSemanticModel(tree);
+        }
 
-            SemanticModel sm = compilation.GetSemanticModel(tree);
+        private MethodDeclarationSyntax GetNewMethodDeclarationSyntax(SyntaxTree tree)
+        {
+            return (MethodDeclarationSyntax)tree.GetCompilationUnitRoot().Members.ElementAt(0);
+        }
 
-            //UsingDirectiveSyntax usingSystem = root.Usings[0];
-            //NameSyntax systemName = usingSystem.Name;
-            //SymbolInfo nameInfo = sm.GetSymbolInfo(systemName);
-            ///////////////////////////////////////////////////////////////////////////////////////////////////////
+        private BlockSyntax GetSyntaxBlockForNonVoidMethod(MethodDeclarationSyntax method)
+        {
+            var statements = new List<StatementSyntax>();
 
-            MethodDeclarationSyntax newMethod = (MethodDeclarationSyntax)tree.GetCompilationUnitRoot().Members.ElementAt(0);
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(method.ToFullString());
+            SemanticModel sm = GetSemanticModelForMethod(tree, method);
+            MethodDeclarationSyntax newMethod = GetNewMethodDeclarationSyntax(tree);
 
-            List<Tuple<string, string>> paramList = new List<Tuple<string, string>>();
+            List<Tuple<string, string, string>> paramList = new List<Tuple<string, string, string>>();
             foreach (var parameter in newMethod.ParameterList.Parameters)
             {
-                IParameterSymbol nameInfo = sm.GetDeclaredSymbol(parameter);
-                ///////////////////////////////////////////////////
-                string paramType = parameter.Type.ToFullString();
-                string paramName = parameter.Identifier.ValueText;
-                paramList.Add(new Tuple<string, string>(paramType, paramName));
+                IParameterSymbol parameterInfo = sm.GetDeclaredSymbol(parameter);
+                string paramType = parameter.Type.ToString().Trim();
+                string paramName = parameter.Identifier.ValueText.Trim();
+                string paramDefValue = GetDefaultValueLiteral(parameterInfo.Type);
+                paramList.Add(new Tuple<string, string, string>(paramType, paramName, paramDefValue));
             }
 
-            StringBuilder defaultInitialization = new StringBuilder();
+            
             foreach (var param in paramList)
             {
                 string paramType = param.Item1;
                 string paramName = param.Item2;
-                Type obj = Type.GetType(paramType);
-                defaultInitialization.Append(
+                string paramDefValue = param.Item3;
+                string wholeStatement =
                     paramType + " " + 
                     paramName + " = " + 
-                    Activator.CreateInstance(Type.GetType(paramType)).ToString() +
-                    "\n");
+                    paramDefValue + ";";
+                statements.Add(SyntaxFactory.ParseStatement(wholeStatement));
             }
 
-            return SyntaxFactory.Block(
-                                    SyntaxFactory.ParseStatement(defaultInitialization.ToString())
-                            );
+            return SyntaxFactory.Block(statements);
         }
 
         private SyntaxList<MemberDeclarationSyntax> GetFormattedMethods(ClassDeclarationSyntax classSynt)
@@ -118,8 +118,7 @@ namespace TestClassGeneratorProject
                             )
                        );
                     } else {
-                        GetSyntaxBlockForNonVoidMethod(classSynt, castMethod);
-                        //methods[i] = castMethod.WithBody(GetSyntaxBlockForNonVoidMethod(classSynt, castMethod));
+                        methods[i] = castMethod.WithBody(GetSyntaxBlockForNonVoidMethod(castMethod));
                     }
                     
                 }
@@ -196,5 +195,77 @@ namespace TestClassGeneratorProject
         }
 
         static void Main() { }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        //i'm so sorry
+        private string GetDefaultValueLiteral(ITypeSymbol type)
+        {
+            if (type.SpecialType == SpecialType.System_String)
+            {
+                return "\"\"";
+            }
+            if (type.IsReferenceType) return "null";
+
+            SpecialType specType = type.SpecialType;
+            switch (specType)
+            {
+               
+                case SpecialType.System_Enum:
+                    return "(System.Enum)null";
+                case SpecialType.System_ValueType:
+                    return "(System.ValueType)null";
+                case SpecialType.System_Boolean:
+                    return "false";
+                case SpecialType.System_Char:
+                    return "'\0'";
+                case SpecialType.System_SByte:
+                case SpecialType.System_Byte:
+                case SpecialType.System_Int16:
+                case SpecialType.System_UInt16:
+                case SpecialType.System_Int32:
+                    return "0";
+                case SpecialType.System_UInt32:
+                    return "0u";
+                case SpecialType.System_Int64:
+                    return "0L";
+                case SpecialType.System_UInt64:
+                    return "0ul";
+                case SpecialType.System_Decimal:
+                    return "0m";
+                case SpecialType.System_Single:
+                    return "0f";
+                case SpecialType.System_Double:
+                    return "0d";
+                case SpecialType.System_String:
+                    return "\"\"";
+                case SpecialType.System_IntPtr:
+                    return "System.IntPtr.Zero";
+                case SpecialType.System_UIntPtr:
+                    return "System.UIntPtr.Zero";
+                case SpecialType.System_Nullable_T:
+                    break;
+                case SpecialType.System_DateTime:
+                    return "System.DateTime.Now";
+                default:
+                    break;
+            }
+
+            return "null";
+        }
     }
 }
