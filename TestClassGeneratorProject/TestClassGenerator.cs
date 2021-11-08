@@ -38,6 +38,27 @@ namespace TestClassGeneratorProject
             return (NamespaceDeclarationSyntax)root.Members.ElementAt(0);
         }
 
+        private SyntaxList<MemberDeclarationSyntax> GetFormattedMethods(ClassDeclarationSyntax classSynt)
+        {
+            int i = 0;
+            MemberDeclarationSyntax[] methods = classSynt.Members.ToArray();
+            foreach (var method in methods)
+            {
+               var attributes =
+               method.AttributeLists.Add(
+                    SyntaxFactory.AttributeList(
+                        SyntaxFactory.SingletonSeparatedList<AttributeSyntax>(
+                            SyntaxFactory.Attribute(
+                                SyntaxFactory.IdentifierName("Test")
+                ))));
+
+                methods[i] = methods[i].WithAttributeLists(attributes);
+                i++;
+            }
+
+            return new SyntaxList<MemberDeclarationSyntax>(methods.ToList());
+        }
+
         private void SetTreeRoot(FileWithContent cSharpProgram)
         {
             string programText = cSharpProgram.Content;
@@ -60,6 +81,7 @@ namespace TestClassGeneratorProject
                                 SyntaxFactory.IdentifierName("TestFixture")
                 ))));
 
+                classes[i] = classes[i].WithMembers(GetFormattedMethods(classes[i]));
                 classes[i] = classes[i].WithAttributeLists(attributes);
                 ++i;
             }
