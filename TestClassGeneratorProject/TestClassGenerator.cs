@@ -17,18 +17,23 @@ namespace TestClassGeneratorProject
     public class TestClassGenerator
     {
         private CompilationUnitSyntax root;
+
+        private UsingDirectiveSyntax GetUsingDeclaration(string namespaceFullName)
+        {
+            NameSyntax name = SyntaxFactory.IdentifierName(namespaceFullName);
+            UsingDirectiveSyntax usingSystem = SyntaxFactory.UsingDirective(name);
+            return usingSystem;
+        }
         
         private NamespaceDeclarationSyntax CreatePerFileSyntaxRootAndGetTestNamespace()
         {
             CompilationUnitSyntax root = SyntaxFactory.CompilationUnit();
 
-            NameSyntax name = SyntaxFactory.IdentifierName("System");
-            name = SyntaxFactory.QualifiedName(name, SyntaxFactory.IdentifierName("Collections"));
-            UsingDirectiveSyntax usingSystem = SyntaxFactory.UsingDirective(name);
+            root = root.AddUsings(GetUsingDeclaration("System.Generics"));
+            root = root.AddUsings(GetUsingDeclaration("NUnit.Framework"));
+            root = root.AddUsings(GetUsingDeclaration("Moq"));
 
-            root = root.AddUsings(usingSystem);
             root = root.AddMembers(SyntaxFactory.NamespaceDeclaration(SyntaxFactory.IdentifierName("GeneratedTestClasses")));
-
 
             return (NamespaceDeclarationSyntax)root.Members.ElementAt(0);
         }
@@ -42,7 +47,23 @@ namespace TestClassGeneratorProject
 
         private ClassDeclarationSyntax[] GetClassSyntaxNodes()
         {
-            return root.DescendantNodes().OfType<ClassDeclarationSyntax>().ToArray();
+            ClassDeclarationSyntax[] classes = root.DescendantNodes().OfType<ClassDeclarationSyntax>().ToArray();
+            int i = 0;
+            foreach (var classDecl in classes){
+                classes[i] = classDecl.WithIdentifier(SyntaxFactory.Identifier(classDecl.Identifier.ValueText + "Test"));
+
+                var attributes =
+                classes[i].AttributeLists.Add(
+                    SyntaxFactory.AttributeList(
+                        SyntaxFactory.SingletonSeparatedList<AttributeSyntax>(
+                            SyntaxFactory.Attribute(
+                                SyntaxFactory.IdentifierName("TestFixture")
+                ))));
+
+                classes[i] = classes[i].WithAttributeLists(attributes);
+                ++i;
+            }
+            return classes;
         }
 
         public async Task<FileWithContent[]> GetTestClassFiles(FileWithContent cSharpProgram)
@@ -62,6 +83,7 @@ namespace TestClassGeneratorProject
                 NamespaceDeclarationSyntax newRoot = roots[i].WithMembers(new SyntaxList<MemberDeclarationSyntax>(classes[i]));
                 program = program.ReplaceNode(roots[i], newRoot);
                 program = program.NormalizeWhitespace();
+
                 toReturn[i] = new FileWithContent("TestFilesOutput\\" + classNode.Identifier + ".cs", program.ToFullString());
                 i++;
             }
