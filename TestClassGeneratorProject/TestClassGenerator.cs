@@ -18,6 +18,20 @@ namespace TestClassGeneratorProject
     {
         private CompilationUnitSyntax root;
         
+        private NamespaceDeclarationSyntax CreatePerFileSyntaxRootAndGetTestNamespace()
+        {
+            CompilationUnitSyntax root = SyntaxFactory.CompilationUnit();
+
+            NameSyntax name = SyntaxFactory.IdentifierName("System");
+            name = SyntaxFactory.QualifiedName(name, SyntaxFactory.IdentifierName("Collections"));
+            UsingDirectiveSyntax usingSystem = SyntaxFactory.UsingDirective(name);
+
+            root = root.AddUsings(usingSystem);
+            root = root.AddMembers(SyntaxFactory.NamespaceDeclaration(SyntaxFactory.IdentifierName("GeneratedTestClasses")));
+
+
+            return (NamespaceDeclarationSyntax)root.Members.ElementAt(0);
+        }
 
         private void SetTreeRoot(FileWithContent cSharpProgram)
         {
@@ -36,13 +50,20 @@ namespace TestClassGeneratorProject
             SetTreeRoot(cSharpProgram);
 
             ClassDeclarationSyntax[] classes = GetClassSyntaxNodes();
+            NamespaceDeclarationSyntax[] roots = new NamespaceDeclarationSyntax[classes.Length];
+
             FileWithContent[] toReturn = new FileWithContent[classes.Length];
 
             int i = 0;
             foreach (var classNode in classes)
             {
-                toReturn[i++] = new FileWithContent("TestFilesOutput\\" + classNode.Identifier + ".cs", classNode.ToFullString());
-                Console.WriteLine(i);
+                roots[i] = CreatePerFileSyntaxRootAndGetTestNamespace();
+                CompilationUnitSyntax program = (CompilationUnitSyntax)roots[i].Parent;
+                NamespaceDeclarationSyntax newRoot = roots[i].WithMembers(new SyntaxList<MemberDeclarationSyntax>(classes[i]));
+                program = program.ReplaceNode(roots[i], newRoot);
+                program = program.NormalizeWhitespace();
+                toReturn[i] = new FileWithContent("TestFilesOutput\\" + classNode.Identifier + ".cs", program.ToFullString());
+                i++;
             }
 
             return toReturn;
