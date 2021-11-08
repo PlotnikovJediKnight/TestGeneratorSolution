@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace FileInputOutputProject
+namespace TestClassGeneratorProject
 {
-    class FileWithContent
+    public class FileWithContent
     {
         public string Path { get; }
 

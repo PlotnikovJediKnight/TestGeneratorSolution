@@ -7,17 +7,10 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using TestClassGeneratorProject;
 
 namespace FileInputOutputProject
 {
-    class TestClassGenerator
-    {
-        public FileWithContent[] GetTestClassFiles(FileWithContent a)
-        {
-            return new FileWithContent[1] { new FileWithContent(a.Path + ".processed", a.Content.ToUpper())};
-        }
-    }
-
     public class Pipeline
     {
         private readonly PipelineConfiguration _pipelineConfiguration;
@@ -39,7 +32,7 @@ namespace FileInputOutputProject
                 new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = _pipelineConfiguration.MaxReadingTasks });
 
             var processingBlock = new TransformBlock<FileWithContent, FileWithContent[]>(
-                fwc => _generator.GetTestClassFiles(fwc),
+                async fwc => await _generator.GetTestClassFiles(fwc),
                 new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = _pipelineConfiguration.MaxProcessingTasks });
 
             var writingBlock = new ActionBlock<FileWithContent[]>(async fwc => await WriteFile(fwc),
@@ -65,13 +58,6 @@ namespace FileInputOutputProject
             {
                 result = await streamReader.ReadToEndAsync();
             }
-            return result;
-        }
-
-        private string ProcessFile(string fileContent)
-        {
-            string result = fileContent.ToUpper();
-            Thread.Sleep(250);
             return result;
         }
 
