@@ -150,6 +150,25 @@ namespace TestClassGeneratorProject
                             );
         }
 
+        private MemberDeclarationSyntax[] GetConstructorArguments()
+        {
+            MemberDeclarationSyntax[] arguments = new MemberDeclarationSyntax[constructorParameters.Count];
+
+            for (int i = 0; i < arguments.Length; ++i)
+            {
+                string typeName = constructorParameters[i].Item1;
+                string fieldName = constructorParameters[i].Item2;
+                if (typeName[0] == 'I')
+                {
+                    typeName = "Mock<" + typeName + ">";
+                }
+                string parseExpression = "private " + typeName + " " + fieldName + ";";
+                arguments[i] = SyntaxFactory.ParseMemberDeclaration(parseExpression);
+            }
+
+            return arguments;
+        }
+
         private BlockSyntax GetSyntaxBlockForSetUpMethod(string testObjectName, string testClassName, ConstructorDeclarationSyntax constructor)
         {
             var statements = new List<StatementSyntax>();
@@ -314,6 +333,12 @@ namespace TestClassGeneratorProject
             ClassDeclarationSyntax[] classes = root.DescendantNodes().OfType<ClassDeclarationSyntax>().ToArray();
             int i = 0;
             foreach (var classDecl in classes){
+
+                //!!!!!!!!!
+                ConstructorWithInterfaceDependencyFound = false;
+                constructorParameters = null;
+                //!!!!!!!!!
+
                 string testObjectName = "_" + classDecl.Identifier.ValueText.ToLower();
                 string testClassName = classDecl.Identifier.ValueText;
 
@@ -330,6 +355,11 @@ namespace TestClassGeneratorProject
                 classes[i] = classes[i].WithAttributeLists(attributes);
                 classes[i] = classes[i].AddMembers(new MemberDeclarationSyntax[1] { GetInnerClassObject(testClassName, testObjectName) });
                 classes[i] = classes[i].WithMembers(GetFormattedMethods(testObjectName, testClassName, classes[i]));
+                if (ConstructorWithInterfaceDependencyFound)
+                {
+                    classes[i] = classes[i].AddMembers(GetConstructorArguments());
+                }
+
 
                 ++i;
             }
