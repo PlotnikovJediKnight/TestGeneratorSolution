@@ -18,7 +18,7 @@ namespace TestClassGeneratorProject
     {
         private CompilationUnitSyntax root;
         private Boolean ConstructorWithInterfaceDependencyFound { get; set; } = false;
-        private List<Tuple<string, string>> constructorParameters = null;
+        private List<Tuple<string, string, string>> constructorParameters = null;
 
         private UsingDirectiveSyntax GetUsingDeclaration(string namespaceFullName)
         {
@@ -163,10 +163,41 @@ namespace TestClassGeneratorProject
             {
                 IParameterSymbol parameterInfo = sm.GetDeclaredSymbol(parameter);
                 string paramType = parameter.Type.ToString().Trim();
-                string paramName = parameter.Identifier.ValueText.Trim();
-                string paramDefValue = GetDefaultValueLiteral(parameterInfo.Type);
+                string paramName = "_" + parameter.Identifier.ValueText.Trim().ToLower();
+                string paramDefValue = GetDefaultValueLiteral(parameterInfo.Type, paramType, false);
                 paramList.Add(new Tuple<string, string, string>(paramType, paramName, paramDefValue));
             }
+
+            foreach (var param in paramList)
+            {
+                string paramName = param.Item2;
+                string paramDefValue = param.Item3;
+                string wholeStatement =
+                    paramName + " = " +
+                    paramDefValue + ";";
+                statements.Add(SyntaxFactory.ParseStatement(wholeStatement));
+            }
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < paramList.Count; ++i)
+            {
+                string paramName = paramList[i].Item2;
+                string paramType = paramList[i].Item1;
+                if (paramType[0] == 'I')
+                {
+                    paramName += ".Object";
+                }
+                sb.Append(paramName);
+                if (i != paramList.Count - 1)
+                    sb.Append(", ");
+            }
+
+            string statement = testObjectName + " = new " + testClassName + "(" + sb.ToString() + ");";
+            statements.Add(SyntaxFactory.ParseStatement(statement));
+
+            //!!!!!
+            constructorParameters = paramList;
+            //!!!!!
 
             return SyntaxFactory.Block(statements);
         }
@@ -351,8 +382,13 @@ namespace TestClassGeneratorProject
 
 
         //i'm so sorry
-        private string GetDefaultValueLiteral(ITypeSymbol type)
+        private string GetDefaultValueLiteral(ITypeSymbol type, string typeName = null, bool ignore = true)
         {
+            if (!ignore && type.Name[0] == 'I' && typeName[0] == 'I')
+            {
+                return "new Mock<" + type.Name +">()";
+            }
+               
             if (type.SpecialType == SpecialType.System_String)
             {
                 return "\"\"";
