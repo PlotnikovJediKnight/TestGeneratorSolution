@@ -255,6 +255,8 @@ namespace TestClassGeneratorProject
                     methods[i] = methods[i].WithAttributeLists(attributes);
                     MethodDeclarationSyntax castMethod = (MethodDeclarationSyntax)methods[i];
 
+                    if (!castMethod.Modifiers[0].ValueText.Contains("public")) { methods[i++] = null; continue; }
+
                     string methodName = castMethod.Identifier.ValueText;
                     methods[i] = castMethod.WithIdentifier(SyntaxFactory.Identifier(methodName + "Test"));
 
@@ -269,6 +271,8 @@ namespace TestClassGeneratorProject
                        );
                     } else {
                         methods[i] = castMethod.WithBody(GetSyntaxBlockForNonVoidMethod(testObjectName, methodName, castMethod));
+                        castMethod = (MethodDeclarationSyntax)methods[i];
+                        methods[i] = castMethod.WithReturnType(SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.VoidKeyword)));
                     }
 
                     castMethod = (MethodDeclarationSyntax)methods[i];
@@ -287,6 +291,9 @@ namespace TestClassGeneratorProject
                     if (!ConstructorWithInterfaceDependencyFound)
                     {
                         ConstructorDeclarationSyntax constr = (ConstructorDeclarationSyntax)method;
+
+                        if (!constr.Modifiers[0].ValueText.Contains("public")) { methods[i++] = null; continue; }
+
                         ParameterListSyntax paramList = constr.ParameterList;
                         foreach (var param in paramList.Parameters)
                         {
