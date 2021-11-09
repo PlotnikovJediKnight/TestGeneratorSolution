@@ -17,6 +17,8 @@ namespace TestClassGeneratorProject
     public class TestClassGenerator
     {
         private CompilationUnitSyntax root;
+        private Boolean ConstructorWithInterfaceDependencyFound { get; set; } = false;
+        private List<Tuple<string, string>> constructorParameters = null;
 
         private UsingDirectiveSyntax GetUsingDeclaration(string namespaceFullName)
         {
@@ -49,9 +51,25 @@ namespace TestClassGeneratorProject
             return compilation.GetSemanticModel(tree);
         }
 
+        private SemanticModel GetSemanticModelForConstructor(SyntaxTree tree, ConstructorDeclarationSyntax constructor)
+        {
+            var assemblyPath = Path.ChangeExtension(Path.GetTempFileName(), "exe");
+
+            var compilation = CSharpCompilation.Create(Path.GetFileName(assemblyPath))
+                .WithOptions(new CSharpCompilationOptions(OutputKind.ConsoleApplication))
+                .AddReferences(MetadataReference.CreateFromFile(typeof(object).Assembly.Location))
+                .AddSyntaxTrees(tree);
+            return compilation.GetSemanticModel(tree);
+        }
+
         private MethodDeclarationSyntax GetNewMethodDeclarationSyntax(SyntaxTree tree)
         {
             return (MethodDeclarationSyntax)tree.GetCompilationUnitRoot().Members.ElementAt(0);
+        }
+
+        private ConstructorDeclarationSyntax GetNewConstructorDeclarationSyntax(SyntaxTree tree)
+        {
+            return (ConstructorDeclarationSyntax)tree.GetCompilationUnitRoot().Members.ElementAt(0);
         }
 
         private BlockSyntax GetSyntaxBlockForNonVoidMethod(string testObjectName, string methodName, MethodDeclarationSyntax method)
@@ -132,13 +150,50 @@ namespace TestClassGeneratorProject
                             );
         }
 
-        private SyntaxList<MemberDeclarationSyntax> GetFormattedMethods(string testObjectName, ClassDeclarationSyntax classSynt)
+        private BlockSyntax GetSyntaxBlockForSetUpMethod(string testObjectName, string testClassName, ConstructorDeclarationSyntax constructor)
+        {
+            var statements = new List<StatementSyntax>();
+
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(constructor.ToFullString());
+            SemanticModel sm = GetSemanticModelForConstructor(tree, constructor);
+            ConstructorDeclarationSyntax newMethod = GetNewConstructorDeclarationSyntax(tree);
+
+            List<Tuple<string, string, string>> paramList = new List<Tuple<string, string, string>>();
+            foreach (var parameter in newMethod.ParameterList.Parameters)
+            {
+                IParameterSymbol parameterInfo = sm.GetDeclaredSymbol(parameter);
+                string paramType = parameter.Type.ToString().Trim();
+                string paramName = parameter.Identifier.ValueText.Trim();
+                string paramDefValue = GetDefaultValueLiteral(parameterInfo.Type);
+                paramList.Add(new Tuple<string, string, string>(paramType, paramName, paramDefValue));
+            }
+
+            return SyntaxFactory.Block(statements);
+        }
+
+        private MethodDeclarationSyntax GetSetUpMethod(string testObjectName, string testClassName, ConstructorDeclarationSyntax constructor)
+        {
+            MethodDeclarationSyntax setup = SyntaxFactory.MethodDeclaration(SyntaxFactory.ParseTypeName("void "), "SetUp");
+            var attributes =
+                    setup.AttributeLists.Add(
+                         SyntaxFactory.AttributeList(
+                             SyntaxFactory.SingletonSeparatedList<AttributeSyntax>(
+                                 SyntaxFactory.Attribute(
+                                     SyntaxFactory.IdentifierName("SetUp")
+                     ))));
+
+            setup = setup.WithAttributeLists(attributes);
+            setup = setup.WithBody(GetSyntaxBlockForSetUpMethod(testObjectName, testClassName, constructor));
+            return setup;
+        }
+
+        private SyntaxList<MemberDeclarationSyntax> GetFormattedMethods(string testObjectName, string testClassName, ClassDeclarationSyntax classSynt)
         {
             int i = 0;
             MemberDeclarationSyntax[] methods = classSynt.Members.ToArray();
             foreach (var method in methods)
             {
-                if (method.IsKind(SyntaxKind.MethodDeclaration)){
+                if (method.IsKind(SyntaxKind.MethodDeclaration)) {
                     var attributes =
                     method.AttributeLists.Add(
                          SyntaxFactory.AttributeList(
@@ -170,11 +225,44 @@ namespace TestClassGeneratorProject
                     methods[i] = castMethod.WithParameterList(
                                             SyntaxFactory.ParseParameterList("()"));
                 }
+                else
+                if ((method.IsKind(SyntaxKind.FieldDeclaration) || method.IsKind(SyntaxKind.PropertyDeclaration)) &&
+                      (!method.GetText().ToString().Contains(testObjectName)))
+                {
+                    methods[i] = null;
+                }
+                else
+                if (method.IsKind(SyntaxKind.ConstructorDeclaration))
+                {
+                    if (!ConstructorWithInterfaceDependencyFound)
+                    {
+                        ConstructorDeclarationSyntax constr = (ConstructorDeclarationSyntax)method;
+                        ParameterListSyntax paramList = constr.ParameterList;
+                        foreach (var param in paramList.Parameters)
+                        {
+                            if (param.Type.ToFullString()[0] == 'I')
+                            {
+                                ConstructorWithInterfaceDependencyFound = true;
+                                methods[i] = GetSetUpMethod(testObjectName, testClassName, constr);
+                                break;
+                            }
+                        }
+
+                        if (!ConstructorWithInterfaceDependencyFound)
+                        {
+                            methods[i] = null;
+                        }
+                    } else
+                    {
+                        methods[i] = null;
+                    }
+                }
 
                 i++;
             }
-
-            return new SyntaxList<MemberDeclarationSyntax>(methods.ToList());
+            List<MemberDeclarationSyntax> returnList = methods.ToList();
+            returnList.RemoveAll(item => item == null);
+            return new SyntaxList<MemberDeclarationSyntax>(returnList);
         }
 
         private MemberDeclarationSyntax GetInnerClassObject(string testClassName, string testObjectName)
@@ -210,7 +298,7 @@ namespace TestClassGeneratorProject
 
                 classes[i] = classes[i].WithAttributeLists(attributes);
                 classes[i] = classes[i].AddMembers(new MemberDeclarationSyntax[1] { GetInnerClassObject(testClassName, testObjectName) });
-                classes[i] = classes[i].WithMembers(GetFormattedMethods(testObjectName, classes[i]));
+                classes[i] = classes[i].WithMembers(GetFormattedMethods(testObjectName, testClassName, classes[i]));
 
                 ++i;
             }
@@ -220,6 +308,8 @@ namespace TestClassGeneratorProject
         public async Task<FileWithContent[]> GetTestClassFiles(FileWithContent cSharpProgram)
         {
             SetTreeRoot(cSharpProgram);
+            ConstructorWithInterfaceDependencyFound = false;
+            constructorParameters = null;
 
             ClassDeclarationSyntax[] classes = GetClassSyntaxNodes();
             NamespaceDeclarationSyntax[] roots = new NamespaceDeclarationSyntax[classes.Length];
