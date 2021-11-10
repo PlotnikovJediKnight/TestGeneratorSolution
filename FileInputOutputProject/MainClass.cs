@@ -7,7 +7,7 @@ namespace FileInputOutputProject.TestFiles
     {
         static async System.Threading.Tasks.Task Main(string[] args)
         {
-            int maxParallelism = 1;
+            int maxParallelism = 5;
             string[] files = Directory.GetFiles("TestFiles", "*.cs");
             var configuration = new PipelineConfiguration(maxReadingTasks: maxParallelism,
                 maxProcessingTasks: maxParallelism,

@@ -14,12 +14,10 @@ namespace FileInputOutputProject
     public class Pipeline
     {
         private readonly PipelineConfiguration _pipelineConfiguration;
-        private readonly TestClassGenerator _generator;
 
         public Pipeline(PipelineConfiguration pipelineConfiguration)
         {
             _pipelineConfiguration = pipelineConfiguration;
-            _generator = new TestClassGenerator();
         }
 
         public async Task PerformProcessing(IEnumerable<string> files)
@@ -32,7 +30,7 @@ namespace FileInputOutputProject
                 new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = _pipelineConfiguration.MaxReadingTasks });
 
             var processingBlock = new TransformBlock<FileWithContent, FileWithContent[]>(
-                async fwc => await _generator.GetTestClassFiles(fwc),
+                async fwc => await new TestClassGenerator().GetTestClassFiles(fwc),
                 new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = _pipelineConfiguration.MaxProcessingTasks });
 
             var writingBlock = new ActionBlock<FileWithContent[]>(async fwc => await WriteFile(fwc),
